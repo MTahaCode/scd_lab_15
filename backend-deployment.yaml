@@ -1,0 +1,57 @@
+# backend-deployment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: mern-stack
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: mern-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      volumes:
+        - name: shared-logs
+          emptyDir: {}
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox
+          command: ['sh', '-c', 'until nc -z mongodb-service 27017; do echo waiting for MongoDB; sleep 2; done;']
+      containers:
+        - name: backend
+          image: yourdockerhub/mern-backend:v1
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: MONGO_URL
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: shared-logs
+              mountPath: /var/log
+        - name: sidecar
+          image: busybox
+          command: ["sh", "-c", "tail -f /var/log/backend.log"]
+          volumeMounts:
+            - name: shared-logs
+              mountPath: /var/log
